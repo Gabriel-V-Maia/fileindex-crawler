@@ -1,18 +1,18 @@
 import requests
-import re
+import os 
 
 from bs4 import BeautifulSoup 
 from dataclasses import dataclass 
-from typing import Optional
+from urllib.parse import urljoin
 
 
 @dataclass
 class requester:
-    def fetch(self, target_url: str):
+    def fetch(self, target_url: str, stream: bool = False):
         headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
                 }
-        r = requests.get(target_url, headers=headers)
+        r = requests.get(target_url, headers=headers, stream=stream)
         
 
         if r.status_code != 200:
@@ -65,39 +65,57 @@ class crawler:
         return found_seasons
 
 
+
     def get_episodes(self, seasons: list):
         collected_episodes = list()
-    
+
         for season in seasons:
             response = self.requester_instance.fetch(season.link)
-        
             season_parser = BeautifulSoup(response.text, "html.parser")
             links = season_parser.find_all('a')
-        
+
             for link in links:
-                episode_link = link.get("href")      
-                episode_title = link.get("title")    
-            
+                episode_link = link.get("href")
+                episode_title = link.get("title")
+
                 if not episode_link or not episode_title:
                     continue
-
-                if not ".mkv" in episode_link:
+                if ".mkv" not in episode_link:
                     continue
 
-                episode = Episode(title=episode_title, link=episode_link)
+                full_link = urljoin(season.link, episode_link)  
+                episode = Episode(title=episode_title, link=full_link)
                 collected_episodes.append(episode)
 
+    
         return collected_episodes
 
-    def start_downloading(self, seasons: list, episodes: list):
 
-        pass
-        
-        
+
+    def start_downloading(self, episodes: list):
+        os.makedirs("downloaded_series", exist_ok=True)
+
+        for episode in episodes:
+            print(f"downloading: {episode.title}")
+            r = self.requester_instance.fetch(episode.link, stream=True)
+            
+            filename = os.path.join("downloaded_series", episode.title)
+            with open(filename, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1048576):
+                    f.write(chunk)
+
+
+            print("finished downloading")
+    
+
     def crawl(self, target_url: str):
         print("started crawling...")
         seasons = self.find_seasons(target_url)
         episodes = self.get_episodes(seasons)
+
+        self.start_downloading(episodes)
+
+
 
         print("finished")
         
