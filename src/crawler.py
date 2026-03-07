@@ -1,5 +1,7 @@
 import requests
 import os 
+import threading
+
 
 from bs4 import BeautifulSoup 
 from dataclasses import dataclass 
@@ -90,23 +92,38 @@ class crawler:
     
         return collected_episodes
 
+    def download_episode(self, episode: Episode):
+        print(f"downloading {episode.title}")
 
+
+        r = self.requester_instance.fetch(episode.link, stream=True)
+        
+        filename = os.path.join("downloaded_series", episode.title)
+        if os.path.exists(filename):
+            print(f"{episode.title} is already downloaded")
+            return 
+
+
+        with open(filename, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1048576):
+                f.write(chunk)
+
+
+        print("finished downloading: {episode.title}")
 
     def start_downloading(self, episodes: list):
         os.makedirs("downloaded_series", exist_ok=True)
+        threads = []
 
         for episode in episodes:
-            print(f"downloading: {episode.title}")
-            r = self.requester_instance.fetch(episode.link, stream=True)
-            
-            filename = os.path.join("downloaded_series", episode.title)
-            with open(filename, "wb") as f:
-                for chunk in r.iter_content(chunk_size=1048576):
-                    f.write(chunk)
+            t = threading.Thread(target=self.download_episode, args=(episode,))
+            threads.append(t)
 
+        for thread in threads:
+            thread.start()
 
-            print("finished downloading")
-    
+        for thread in threads:
+            thread.join()
 
     def crawl(self, target_url: str):
         print("started crawling...")
@@ -132,6 +149,4 @@ def main():
     crawl = crawler(html_content=response.text,requester_instance=req, parser=parser)
 
     crawl.crawl(target_url)
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
